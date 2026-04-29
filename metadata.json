@@ -1,0 +1,6 @@
+{
+  "name": "SnapMark Studio",
+  "description": "Application de traitement d'images par lot pour apposer un logo et une date.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
