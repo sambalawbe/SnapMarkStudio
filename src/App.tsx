@@ -74,7 +74,11 @@ export default function App() {
   // Handle Directory Selection
   const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const filesArray = (Array.from(e.target.files) as File[]).filter(file => file.type.startsWith('image/'));
+      const filesArray = (Array.from(e.target.files) as File[])
+        .filter(file => file.type.startsWith('image/'))
+        // Tri par date de dernière modification
+        .sort((a, b) => a.lastModified - b.lastModified);
+      
       setState(prev => ({ ...prev, photos: filesArray }));
     }
   };
@@ -218,7 +222,9 @@ export default function App() {
       for (let i = 0; i < state.photos.length; i++) {
         const photo = state.photos[i];
         const processedBlob = await processImage(photo, logoImg, state.config);
-        zip.file(`processed_${photo.name}`, processedBlob);
+        // Ajout d'un index numérique pour préserver l'ordre chronologique
+        const index = (i + 1).toString().padStart(3, '0');
+        zip.file(`${index}_${photo.name}`, processedBlob);
         
         setState(prev => ({ ...prev, progress: Math.round(((i + 1) / state.photos.length) * 100) }));
       }
