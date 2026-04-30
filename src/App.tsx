@@ -26,28 +26,39 @@ import { saveAs } from 'file-saver';
 // Types
 type Position = 'top-left' | 'top-right' | 'top-center' | 'bottom-left' | 'bottom-right' | 'bottom-center' | 'center';
 
+interface SavedLogo {
+  id: string;
+  data: string;
+  name: string;
+}
+
 interface AppState {
   photos: File[];
   logo: File | null;
   logoPreview: string | null;
+  savedLogos: SavedLogo[];
   processing: boolean;
   progress: number;
   config: {
+    logoId?: string;
     logoPosition: Position;
-    logoScale: number; // Percentage of image width
+    logoScale: number;
     logoOpacity: number;
-    logoMargin: number; // Percentage of image width
+    logoMargin: number;
     dateEnabled: boolean;
     datePosition: Position;
     fontSize: number;
     fontColor: string;
-    dateFormat: 'current' | 'original'; // 'original' would need EXIF, let's stick to current or manual for now
+    dateFormat: 'current' | 'original';
     customDate: string;
   }
 }
 
-const INITIAL_CONFIG = {
-  logoPosition: 'bottom-right' as Position,
+const STORAGE_KEY = 'snapmark_settings';
+const LOGOS_STORAGE_KEY = 'snapmark_logos';
+
+const DEFAULT_CONFIG = {
+  logoPosition: 'bottom-center' as Position,
   logoScale: 15,
   logoOpacity: 0.8,
   logoMargin: 2,
@@ -56,18 +67,35 @@ const INITIAL_CONFIG = {
   fontSize: 32,
   fontColor: '#ffffff',
   dateFormat: 'current' as const,
-  customDate: new Date().toLocaleDateString('fr-FR'),
+  customDate: new Date().toISOString().split('T')[0],
 };
 
 export default function App() {
-  const [state, setState] = useState<AppState>({
-    photos: [],
-    logo: null,
-    logoPreview: null,
-    processing: false,
-    progress: 0,
-    config: INITIAL_CONFIG
+  const [state, setState] = useState<AppState>(() => {
+    // Load from localStorage on init
+    const savedConfig = localStorage.getItem(STORAGE_KEY);
+    const savedLogosJson = localStorage.getItem(LOGOS_STORAGE_KEY);
+    
+    return {
+      photos: [],
+      logo: null,
+      logoPreview: null,
+      savedLogos: savedLogosJson ? JSON.parse(savedLogosJson) : [],
+      processing: false,
+      progress: 0,
+      config: savedConfig ? { ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) } : DEFAULT_CONFIG
+    };
   });
+
+  // Persist settings
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.config));
+  }, [state.config]);
+
+  // Persist logos
+  useEffect(() => {
+    localStorage.setItem(LOGOS_STORAGE_KEY, JSON.stringify(state.savedLogos));
+  }, [state.savedLogos]);
 
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
@@ -76,7 +104,6 @@ export default function App() {
     if (e.target.files) {
       const filesArray = (Array.from(e.target.files) as File[])
         .filter(file => file.type.startsWith('image/'))
-        // Tri par date de dernière modification
         .sort((a, b) => a.lastModified - b.lastModified);
       
       setState(prev => ({ ...prev, photos: filesArray }));
@@ -89,14 +116,44 @@ export default function App() {
       const file = e.target.files[0];
       const reader = new FileReader();
       reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const newLogo: SavedLogo = {
+          id: Date.now().toString(),
+          data: dataUrl,
+          name: file.name
+        };
+        
         setState(prev => ({ 
           ...prev, 
-          logo: file, 
-          logoPreview: reader.result as string 
+          logoPreview: dataUrl,
+          savedLogos: [newLogo, ...prev.savedLogos].slice(0, 10), // Keep last 10
+          config: { ...prev.config, logoId: newLogo.id }
         }));
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const selectSavedLogo = (logo: SavedLogo) => {
+    setState(prev => ({
+      ...prev,
+      logoPreview: logo.data,
+      config: { ...prev.config, logoId: logo.id }
+    }));
+  };
+
+  const deleteSavedLogo = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setState(prev => {
+      const newLogos = prev.savedLogos.filter(l => l.id !== id);
+      const isCurrent = prev.config.logoId === id;
+      return {
+        ...prev,
+        savedLogos: newLogos,
+        logoPreview: isCurrent ? null : prev.logoPreview,
+        config: { ...prev.config, logoId: isCurrent ? undefined : prev.config.logoId }
+      };
+    });
   };
 
   // Image Processing Logic
@@ -294,11 +351,40 @@ export default function App() {
                   onChange={handleLogoUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer z-10"
                 />
-                <button className="text-[11px] font-semibold px-2 py-1 border border-border rounded hover:border-text-dim transition-colors">
-                  Changer
+                <button className="flex items-center gap-2 text-[11px] font-semibold px-2 py-1 border border-border rounded hover:border-accent hover:text-accent transition-colors">
+                  <Plus className="w-3 h-3" /> Ajouter
                 </button>
               </div>
             </div>
+
+            {/* Saved Logos Gallery */}
+            {state.savedLogos.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none custom-scrollbar group/gallery">
+                {state.savedLogos.map((logo) => (
+                  <div 
+                    key={logo.id}
+                    onClick={() => selectSavedLogo(logo)}
+                    className={`
+                      relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1
+                      ${state.config.logoId === logo.id ? 'border-accent bg-accent/10 scale-105' : 'border-border hover:border-text-dim/50'}
+                    `}
+                  >
+                    <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
+                    <button 
+                      onClick={(e) => deleteSavedLogo(logo.id, e)}
+                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity z-20"
+                    >
+                      <X className="w-2 h-2" />
+                    </button>
+                    {state.config.logoId === logo.id && (
+                      <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full p-0.5">
+                        <CheckCircle2 className="w-2 h-2" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-4 pt-2">
               <div className="flex justify-between items-center">
@@ -392,15 +478,13 @@ export default function App() {
             {state.config.dateEnabled && (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-mono text-[11px]">Format</span>
-                  <select 
+                  <span className="text-sm">Date</span>
+                  <input 
+                    type="date"
                     value={state.config.customDate}
                     onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, customDate: e.target.value } }))}
-                    className="bg-bg border border-border text-[11px] p-1 rounded w-32 focus:outline-accent"
-                  >
-                    <option value={new Date().toLocaleDateString('fr-FR')}>JJ/MM/AAAA</option>
-                    <option value={new Date().toLocaleDateString('sv-SE')}>AAAA-MM-JJ</option>
-                  </select>
+                    className="bg-bg border border-border text-[11px] p-1 rounded w-32 focus:outline-accent text-white"
+                  />
                 </div>
 
                 <div className="flex justify-between items-center">
