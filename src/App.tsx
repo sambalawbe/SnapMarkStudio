@@ -419,12 +419,20 @@ export default function App() {
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] text-text-dim uppercase">
                   <span>Taille</span>
-                  <span>{state.config.logoScale}%</span>
+                  <div className="flex items-center gap-2">
+                    <input 
+                      type="number"
+                      value={state.config.logoScale}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoScale: Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) } }))}
+                      className="w-10 bg-bg border border-border text-[10px] text-center rounded focus:outline-accent"
+                    />
+                    <span>%</span>
+                  </div>
                 </div>
                 <input 
-                  type="range" min="5" max="50" value={state.config.logoScale}
+                  type="range" min="1" max="100" value={state.config.logoScale}
                   onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoScale: parseInt(e.target.value) } }))}
-                  className="w-full h-1 bg-bg border border-border appearance-none rounded-full accent-accent"
+                  className="w-full h-1 bg-bg border border-border appearance-none rounded-full accent-accent cursor-pointer"
                 />
               </div>
             </div>
