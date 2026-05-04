@@ -59,7 +59,7 @@ const LOGOS_STORAGE_KEY = 'snapmark_logos';
 
 const DEFAULT_CONFIG = {
   logoPosition: 'bottom-center' as Position,
-  logoScale: 15,
+  logoScale: 4,
   logoOpacity: 0.8,
   logoMargin: 2,
   dateEnabled: true,
@@ -96,6 +96,40 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(LOGOS_STORAGE_KEY, JSON.stringify(state.savedLogos));
   }, [state.savedLogos]);
+
+  // Handle Default Logo (/logo.png)
+  useEffect(() => {
+    const checkDefaultLogo = async () => {
+      try {
+        const response = await fetch('/logo.png');
+        if (response.ok) {
+          setState(prev => {
+            const hasDefault = prev.savedLogos.some(l => l.id === 'default-system-logo');
+            if (hasDefault) return prev;
+
+            const newLogo: SavedLogo = {
+              id: 'default-system-logo',
+              data: '/logo.png',
+              name: 'Logo Par Défaut'
+            };
+
+            return {
+              ...prev,
+              savedLogos: [newLogo, ...prev.savedLogos],
+              logoPreview: prev.logoPreview || '/logo.png',
+              config: { 
+                ...prev.config, 
+                logoId: prev.config.logoId || 'default-system-logo' 
+              }
+            };
+          });
+        }
+      } catch (e) {
+        // Silent fail if logo.png not found
+      }
+    };
+    checkDefaultLogo();
+  }, []); // Only run once on mount to avoid duplicates
 
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
@@ -144,6 +178,7 @@ export default function App() {
 
   const deleteSavedLogo = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (id === 'default-system-logo') return; // Cannot delete system logo
     setState(prev => {
       const newLogos = prev.savedLogos.filter(l => l.id !== id);
       const isCurrent = prev.config.logoId === id;
@@ -300,7 +335,13 @@ export default function App() {
     <div className="min-h-screen bg-bg text-text p-6 flex flex-col gap-6 max-w-[1400px] mx-auto overflow-hidden">
       {/* Header */}
       <header className="flex justify-between items-center border-b border-border pb-4">
-        <div className="text-accent text-xl font-bold tracking-tighter">PIXELSTAMP v1.0</div>
+        <div className="flex items-center gap-4">
+          <div className="text-accent text-xl font-bold tracking-tighter">PIXELSTAMP v1.0</div>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-accent/10 border border-accent/20 rounded-full">
+            <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
+            <span className="text-[10px] text-accent font-bold uppercase tracking-widest">Bot Telegram Actif</span>
+          </div>
+        </div>
         <div className="text-text-dim text-xs font-mono">
           Session : {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
         </div>
