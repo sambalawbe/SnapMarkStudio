@@ -75,12 +75,29 @@ export default function App() {
     // Load from localStorage on init
     const savedConfig = localStorage.getItem(STORAGE_KEY);
     const savedLogosJson = localStorage.getItem(LOGOS_STORAGE_KEY);
+    let savedLogos: SavedLogo[] = [];
+    if (savedLogosJson) {
+      try {
+        const parsed = JSON.parse(savedLogosJson);
+        if (Array.isArray(parsed)) {
+          // Deduplicate by ID just in case
+          const seen = new Set();
+          savedLogos = parsed.filter(logo => {
+            if (seen.has(logo.id)) return false;
+            seen.add(logo.id);
+            return true;
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse saved logos', e);
+      }
+    }
     
     return {
       photos: [],
       logo: null,
       logoPreview: null,
-      savedLogos: savedLogosJson ? JSON.parse(savedLogosJson) : [],
+      savedLogos,
       processing: false,
       progress: 0,
       config: savedConfig ? { ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) } : DEFAULT_CONFIG
@@ -99,10 +116,11 @@ export default function App() {
 
   // Handle Default Logo (/logo.png)
   useEffect(() => {
+    let isMounted = true;
     const checkDefaultLogo = async () => {
       try {
         const response = await fetch('/logo.png');
-        if (response.ok) {
+        if (response.ok && isMounted) {
           setState(prev => {
             const hasDefault = prev.savedLogos.some(l => l.id === 'default-system-logo');
             if (hasDefault) return prev;
@@ -129,6 +147,7 @@ export default function App() {
       }
     };
     checkDefaultLogo();
+    return () => { isMounted = false; };
   }, []); // Only run once on mount to avoid duplicates
 
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
@@ -399,33 +418,43 @@ export default function App() {
             </div>
 
             {/* Saved Logos Gallery */}
-            {state.savedLogos.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none custom-scrollbar group/gallery">
-                {state.savedLogos.map((logo) => (
-                  <div 
-                    key={logo.id}
-                    onClick={() => selectSavedLogo(logo)}
-                    className={`
-                      relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1
-                      ${state.config.logoId === logo.id ? 'border-accent bg-accent/10 scale-105' : 'border-border hover:border-text-dim/50'}
-                    `}
-                  >
-                    <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none custom-scrollbar group/gallery">
+              <div 
+                onClick={() => setState(prev => ({ ...prev, logoPreview: null, config: { ...prev.config, logoId: undefined } }))}
+                className={`
+                  relative flex-shrink-0 w-12 h-12 rounded-lg border border-dashed cursor-pointer transition-all flex items-center justify-center
+                  ${!state.config.logoId ? 'border-accent bg-accent/10' : 'border-border hover:border-text-dim/50'}
+                `}
+              >
+                <X className="w-5 h-5 text-text-dim" />
+              </div>
+
+              {state.savedLogos.map((logo) => (
+                <div 
+                  key={logo.id}
+                  onClick={() => selectSavedLogo(logo)}
+                  className={`
+                    relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1
+                    ${state.config.logoId === logo.id ? 'border-accent bg-accent/10 scale-105' : 'border-border hover:border-text-dim/50'}
+                  `}
+                >
+                  <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
+                  {logo.id !== 'default-system-logo' && (
                     <button 
                       onClick={(e) => deleteSavedLogo(logo.id, e)}
-                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity z-20"
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover/item:opacity-100 hover:scale-110 transition-all z-20 shadow-lg"
                     >
-                      <X className="w-2 h-2" />
+                      <X className="w-3 h-3" />
                     </button>
-                    {state.config.logoId === logo.id && (
-                      <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full p-0.5">
-                        <CheckCircle2 className="w-2 h-2" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+                  )}
+                  {state.config.logoId === logo.id && (
+                    <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full p-0.5">
+                      <CheckCircle2 className="w-2 h-2" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
 
             <div className="space-y-4 pt-2">
               <div className="flex justify-between items-center">
