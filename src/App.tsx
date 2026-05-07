@@ -40,7 +40,7 @@ interface AppState {
   processing: boolean;
   progress: number;
   config: {
-    logoId?: string;
+    logoIds: string[];
     logoPosition: Position;
     logoScale: number;
     logoOpacity: number;
@@ -68,6 +68,7 @@ const DEFAULT_CONFIG = {
   fontColor: '#ffffff',
   dateFormat: 'current' as const,
   customDate: new Date().toISOString().split('T')[0],
+  logoIds: [] as string[],
 };
 
 export default function App() {
@@ -104,6 +105,18 @@ export default function App() {
     };
   });
 
+  // Handle migration from logoId to logoIds if needed
+  useEffect(() => {
+    if ((state.config as any).logoId && state.config.logoIds.length === 0) {
+      setState(prev => {
+        const oldId = (prev.config as any).logoId;
+        const newConfig = { ...prev.config, logoIds: [oldId] };
+        delete (newConfig as any).logoId;
+        return { ...prev, config: newConfig };
+      });
+    }
+  }, []);
+
   // Persist settings
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.config));
@@ -137,7 +150,7 @@ export default function App() {
               logoPreview: prev.logoPreview || '/logo.png',
               config: { 
                 ...prev.config, 
-                logoId: prev.config.logoId || 'default-system-logo' 
+                logoIds: prev.config.logoIds.length === 0 ? ['default-system-logo'] : prev.config.logoIds 
               }
             };
           });
@@ -180,7 +193,7 @@ export default function App() {
           ...prev, 
           logoPreview: dataUrl,
           savedLogos: [newLogo, ...prev.savedLogos].slice(0, 10), // Keep last 10
-          config: { ...prev.config, logoId: newLogo.id }
+          config: { ...prev.config, logoIds: [newLogo.id] }
         }));
       };
       reader.readAsDataURL(file);
@@ -188,11 +201,22 @@ export default function App() {
   };
 
   const selectSavedLogo = (logo: SavedLogo) => {
-    setState(prev => ({
-      ...prev,
-      logoPreview: logo.data,
-      config: { ...prev.config, logoId: logo.id }
-    }));
+    setState(prev => {
+      const isSelected = prev.config.logoIds.includes(logo.id);
+      let newLogoIds: string[];
+      
+      if (isSelected) {
+        newLogoIds = prev.config.logoIds.filter(id => id !== logo.id);
+      } else {
+        // Add to list, max 2
+        newLogoIds = [...prev.config.logoIds, logo.id].slice(-2);
+      }
+
+      return {
+        ...prev,
+        config: { ...prev.config, logoIds: newLogoIds }
+      };
+    });
   };
 
   const deleteSavedLogo = (id: string, e: React.MouseEvent) => {
@@ -200,18 +224,17 @@ export default function App() {
     if (id === 'default-system-logo') return; // Cannot delete system logo
     setState(prev => {
       const newLogos = prev.savedLogos.filter(l => l.id !== id);
-      const isCurrent = prev.config.logoId === id;
+      const newLogoIds = prev.config.logoIds.filter(logoId => logoId !== id);
       return {
         ...prev,
         savedLogos: newLogos,
-        logoPreview: isCurrent ? null : prev.logoPreview,
-        config: { ...prev.config, logoId: isCurrent ? undefined : prev.config.logoId }
+        config: { ...prev.config, logoIds: newLogoIds }
       };
     });
   };
 
   // Image Processing Logic
-  const processImage = useCallback(async (photo: File, logoImg: HTMLImageElement | null, config: typeof state.config): Promise<Blob> => {
+  const processImage = useCallback(async (photo: File, logoImgs: HTMLImageElement[], config: typeof state.config): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
@@ -225,29 +248,42 @@ export default function App() {
         // Draw basic image
         ctx.drawImage(img, 0, 0);
 
-        // Draw Logo
-        if (logoImg) {
+        // Draw Logo(s)
+        if (logoImgs.length > 0) {
           ctx.save();
           ctx.globalAlpha = config.logoOpacity;
           
-          const targetWidth = (canvas.width * config.logoScale) / 100;
-          const targetHeight = (logoImg.height / logoImg.width) * targetWidth;
+          const singleLogoScale = config.logoScale;
+          const targetWidthPerLogo = (canvas.width * singleLogoScale) / 100;
+          const spacing = targetWidthPerLogo * 0.1; // 10% spacing between logos
+          
+          const totalWidth = logoImgs.length === 1 
+            ? targetWidthPerLogo 
+            : (targetWidthPerLogo * 2) + spacing;
+
+          // We assume same aspect ratio for simplicity or use the first one's ratio for height
+          const firstLogo = logoImgs[0];
+          const targetHeight = (firstLogo.height / firstLogo.width) * targetWidthPerLogo;
           const margin = (canvas.width * config.logoMargin) / 100;
 
-          let x = 0;
-          let y = 0;
+          let startX = 0;
+          let startY = 0;
 
           switch (config.logoPosition) {
-            case 'top-left': x = margin; y = margin; break;
-            case 'top-right': x = canvas.width - targetWidth - margin; y = margin; break;
-            case 'top-center': x = (canvas.width - targetWidth) / 2; y = margin; break;
-            case 'bottom-left': x = margin; y = canvas.height - targetHeight - margin; break;
-            case 'bottom-right': x = canvas.width - targetWidth - margin; y = canvas.height - targetHeight - margin; break;
-            case 'bottom-center': x = (canvas.width - targetWidth) / 2; y = canvas.height - targetHeight - margin; break;
-            case 'center': x = (canvas.width - targetWidth) / 2; y = (canvas.height - targetHeight) / 2; break;
+            case 'top-left': startX = margin; startY = margin; break;
+            case 'top-right': startX = canvas.width - totalWidth - margin; startY = margin; break;
+            case 'top-center': startX = (canvas.width - totalWidth) / 2; startY = margin; break;
+            case 'bottom-left': startX = margin; startY = canvas.height - targetHeight - margin; break;
+            case 'bottom-right': startX = canvas.width - totalWidth - margin; startY = canvas.height - targetHeight - margin; break;
+            case 'bottom-center': startX = (canvas.width - totalWidth) / 2; startY = canvas.height - targetHeight - margin; break;
+            case 'center': startX = (canvas.width - totalWidth) / 2; startY = (canvas.height - targetHeight) / 2; break;
           }
 
-          ctx.drawImage(logoImg, x, y, targetWidth, targetHeight);
+          logoImgs.forEach((logoImg, index) => {
+            const x = startX + (index * (targetWidthPerLogo + spacing));
+            ctx.drawImage(logoImg, x, startY, targetWidthPerLogo, targetHeight);
+          });
+          
           ctx.restore();
         }
 
@@ -295,15 +331,20 @@ export default function App() {
   useEffect(() => {
     if (state.photos.length > 0) {
       const updatePreview = async () => {
-        let logoImg: HTMLImageElement | null = null;
-        if (state.logoPreview) {
-          logoImg = new Image();
-          logoImg.src = state.logoPreview;
-          await new Promise(r => logoImg!.onload = r);
+        const logoImgs: HTMLImageElement[] = [];
+        
+        for (const logoId of state.config.logoIds) {
+          const logoData = state.savedLogos.find(l => l.id === logoId)?.data;
+          if (logoData) {
+            const logoImg = new Image();
+            logoImg.src = logoData;
+            await new Promise(r => logoImg!.onload = r);
+            logoImgs.push(logoImg);
+          }
         }
 
         try {
-          const processedBlob = await processImage(state.photos[0], logoImg, state.config);
+          const processedBlob = await processImage(state.photos[0], logoImgs, state.config);
           setPreviewSrc(URL.createObjectURL(processedBlob));
         } catch (e) {
           console.error('Preview error:', e);
@@ -313,7 +354,7 @@ export default function App() {
     } else {
       setPreviewSrc(null);
     }
-  }, [state.photos, state.logoPreview, state.config, processImage]);
+  }, [state.photos, state.savedLogos, state.config, processImage]);
 
   const startProcessing = async () => {
     if (state.photos.length === 0) return;
@@ -321,18 +362,22 @@ export default function App() {
     setState(prev => ({ ...prev, processing: true, progress: 0 }));
     
     const zip = new JSZip();
-    let logoImg: HTMLImageElement | null = null;
-    
-    if (state.logoPreview) {
-      logoImg = new Image();
-      logoImg.src = state.logoPreview;
-      await new Promise(r => logoImg!.onload = r);
+    const logoImgs: HTMLImageElement[] = [];
+
+    for (const logoId of state.config.logoIds) {
+      const logoData = state.savedLogos.find(l => l.id === logoId)?.data;
+      if (logoData) {
+        const logoImg = new Image();
+        logoImg.src = logoData;
+        await new Promise(r => logoImg!.onload = r);
+        logoImgs.push(logoImg);
+      }
     }
 
     try {
       for (let i = 0; i < state.photos.length; i++) {
         const photo = state.photos[i];
-        const processedBlob = await processImage(photo, logoImg, state.config);
+        const processedBlob = await processImage(photo, logoImgs, state.config);
         // Ajout d'un index numérique pour préserver l'ordre chronologique
         const index = (i + 1).toString().padStart(3, '0');
         zip.file(`${index}_${photo.name}`, processedBlob);
@@ -420,40 +465,45 @@ export default function App() {
             {/* Saved Logos Gallery */}
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none custom-scrollbar group/gallery">
               <div 
-                onClick={() => setState(prev => ({ ...prev, logoPreview: null, config: { ...prev.config, logoId: undefined } }))}
+                onClick={() => setState(prev => ({ ...prev, config: { ...prev.config, logoIds: [] } }))}
                 className={`
                   relative flex-shrink-0 w-12 h-12 rounded-lg border border-dashed cursor-pointer transition-all flex items-center justify-center
-                  ${!state.config.logoId ? 'border-accent bg-accent/10' : 'border-border hover:border-text-dim/50'}
+                  ${state.config.logoIds.length === 0 ? 'border-accent bg-accent/10' : 'border-border hover:border-text-dim/50'}
                 `}
               >
                 <X className="w-5 h-5 text-text-dim" />
               </div>
 
-              {state.savedLogos.map((logo) => (
-                <div 
-                  key={logo.id}
-                  onClick={() => selectSavedLogo(logo)}
-                  className={`
-                    relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1
-                    ${state.config.logoId === logo.id ? 'border-accent bg-accent/10 scale-105' : 'border-border hover:border-text-dim/50'}
-                  `}
-                >
-                  <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
-                  {logo.id !== 'default-system-logo' && (
-                    <button 
-                      onClick={(e) => deleteSavedLogo(logo.id, e)}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover/item:opacity-100 hover:scale-110 transition-all z-20 shadow-lg"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                  {state.config.logoId === logo.id && (
-                    <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full p-0.5">
-                      <CheckCircle2 className="w-2 h-2" />
-                    </div>
-                  )}
-                </div>
-              ))}
+              {state.savedLogos.map((logo) => {
+                const selectionIndex = state.config.logoIds.indexOf(logo.id);
+                const isSelected = selectionIndex !== -1;
+                
+                return (
+                  <div 
+                    key={logo.id}
+                    onClick={() => selectSavedLogo(logo)}
+                    className={`
+                      relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1
+                      ${isSelected ? 'border-accent bg-accent/10 scale-105' : 'border-border hover:border-text-dim/50'}
+                    `}
+                  >
+                    <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
+                    {logo.id !== 'default-system-logo' && (
+                      <button 
+                        onClick={(e) => deleteSavedLogo(logo.id, e)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover/item:opacity-100 hover:scale-110 transition-all z-20 shadow-lg"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                    {isSelected && (
+                      <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border-2 border-bg">
+                        {state.config.logoIds.length > 1 ? selectionIndex + 1 : <CheckCircle2 className="w-2 h-2" />}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="space-y-4 pt-2">

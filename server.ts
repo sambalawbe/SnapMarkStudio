@@ -12,8 +12,7 @@ const app = express();
 const PORT = 3000;
 
 // Simple in-memory store for bot user settings
-// In a real app, use a database (Firebase, etc.)
-const userSettings: Record<number, { logoBuffer?: Buffer, logoName?: string }> = {};
+const userSettings: Record<number, { logoBuffers: Buffer[] }> = {};
 
 async function startServer() {
   const isProd = process.env.NODE_ENV === "production";
@@ -24,7 +23,7 @@ async function startServer() {
     const bot = new Telegraf(token);
 
     bot.start((ctx) => {
-      ctx.reply("Bienvenue sur SnapMark Studio ! 📸\n\nEnvoyez-moi une photo pour y apposer un filigrane.\n\nOptionnel : Envoyez-moi d'abord votre logo (image PNG ou JPG) pour le personnaliser.");
+      ctx.reply("Bienvenue sur SnapMark Studio ! 📸\n\nEnvoyez-moi une photo pour y apposer un filigrane.\n\nOptionnel : Envoyez-moi jusqu'à 2 logos (image PNG ou JPG) pour les personnaliser. Ils seront affichés côte à côte.");
     });
 
     // Handle Photos
@@ -39,24 +38,18 @@ async function startServer() {
         const response = await axios.get(fileLink.toString(), { responseType: 'arraybuffer' });
         const photoBuffer = Buffer.from(response.data);
 
-        // Get user logo or default
-        let logoBuffer: Buffer;
-        const savedLogo = userSettings[ctx.from.id]?.logoBuffer;
+        // Get user logos or default
+        let currentLogoBuffers: Buffer[] = userSettings[ctx.from.id]?.logoBuffers || [];
         
-        if (savedLogo) {
-          logoBuffer = savedLogo;
-        } else {
+        if (currentLogoBuffers.length === 0) {
           // Use default logo (prioritizing logo.png then favicon.svg)
           const customLogoPath = path.join(process.cwd(), "src", "logo.png");
           const faviconPath = path.join(process.cwd(), "src", "favicon.svg");
           
           if (fs.existsSync(customLogoPath)) {
-            logoBuffer = fs.readFileSync(customLogoPath);
+            currentLogoBuffers = [fs.readFileSync(customLogoPath)];
           } else if (fs.existsSync(faviconPath)) {
-            logoBuffer = fs.readFileSync(faviconPath);
-          } else {
-            // Fallback: simple text or empty transparent if everything fails
-            logoBuffer = await sharp({ create: { width: 100, height: 100, channels: 4, background: { r: 96, g: 165, b: 250, alpha: 0.5 } } }).png().toBuffer();
+            currentLogoBuffers = [fs.readFileSync(faviconPath)];
           }
         }
 
@@ -65,11 +58,29 @@ async function startServer() {
         const width = metadata.width || 1000;
         const height = metadata.height || 1000;
 
-        // Resize logo to ~3.75% of width
+        // Resize logos to ~3.75% of width each
         const logoSize = Math.round(width * 0.0375);
-        const resizedLogo = await sharp(logoBuffer)
-          .resize(logoSize, logoSize, { fit: 'inside' })
-          .toBuffer();
+        const spacing = Math.round(logoSize * 0.1);
+
+        const composites: any[] = [];
+        
+        if (currentLogoBuffers.length > 0) {
+          const resizedLogos = await Promise.all(currentLogoBuffers.map(buf => 
+            sharp(buf).resize(logoSize, logoSize, { fit: 'inside' }).toBuffer()
+          ));
+
+          const totalLogosWidth = (resizedLogos.length * logoSize) + ((resizedLogos.length - 1) * spacing);
+          const startX = Math.round((width - totalLogosWidth) / 2);
+          const y = height - logoSize - 20;
+
+          resizedLogos.forEach((logoBuf, index) => {
+            composites.push({
+              input: logoBuf,
+              top: y,
+              left: startX + (index * (logoSize + spacing))
+            });
+          });
+        }
 
         // Prepare Date overlay
         const dateText = new Date().toLocaleDateString('fr-FR');
@@ -85,11 +96,10 @@ async function startServer() {
           <text x="${width - 10}" y="${20 + fontSize}" class="date" text-anchor="end">${dateText}</text>
         </svg>`);
 
+        composites.push({ input: dateSvg, top: 0, left: 0 });
+
         const processedBuffer = await sharp(photoBuffer)
-          .composite([
-            { input: resizedLogo, gravity: 'south', top: height - logoSize - 20, left: Math.round((width - logoSize) / 2) }, // Bottom center
-            { input: dateSvg, top: 0, left: 0 }
-          ])
+          .composite(composites)
           .toBuffer();
 
         // Send back
@@ -100,18 +110,40 @@ async function startServer() {
       }
     });
 
-    // Handle Logo Updates (when user sends an image/doc as logo)
-    bot.on(message("document"), async (ctx) => {
-      if (ctx.message.document.mime_type?.startsWith("image/")) {
-        const fileLink = await ctx.telegram.getFileLink(ctx.message.document.file_id);
+    // Handle Logo Updates
+    bot.on([message("document"), message("photo")], async (ctx) => {
+      let fileId = "";
+      let fileName = "logo.png";
+
+      if ("document" in ctx.message && ctx.message.document.mime_type?.startsWith("image/")) {
+        fileId = ctx.message.document.file_id;
+        fileName = ctx.message.document.file_name || "logo.png";
+      } else if ("photo" in ctx.message) {
+        fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      } else {
+        return; // Not an image
+      }
+
+      try {
+        const fileLink = await ctx.telegram.getFileLink(fileId);
         const response = await axios.get(fileLink.toString(), { responseType: 'arraybuffer' });
+        const logoBuffer = Buffer.from(response.data);
+
+        if (!userSettings[ctx.from.id]) {
+          userSettings[ctx.from.id] = { logoBuffers: [] };
+        }
+
+        const buffers = userSettings[ctx.from.id].logoBuffers;
+        buffers.push(logoBuffer);
         
-        userSettings[ctx.from.id] = { 
-          logoBuffer: Buffer.from(response.data),
-          logoName: ctx.message.document.file_name
-        };
+        // Keep only last 2
+        if (buffers.length > 2) {
+          buffers.shift();
+        }
         
-        ctx.reply(`✅ Logo mis à jour : ${ctx.message.document.file_name}`);
+        ctx.reply(`✅ Logo ajouté (${buffers.length}/2). Envoyez un autre logo pour le duo, ou une photo pour tester.`);
+      } catch (err) {
+        ctx.reply("Erreur lors de l'enregistrement du logo.");
       }
     });
 
