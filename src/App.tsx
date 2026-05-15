@@ -297,7 +297,13 @@ export default function App() {
           ctx.shadowOffsetX = 2;
           ctx.shadowOffsetY = 2;
 
-          const dateText = config.customDate || new Date().toLocaleDateString('fr-FR');
+          let dateText = config.customDate || new Date().toISOString().split('T')[0];
+          // Format YYYY-MM-DD to DD/MM/YYYY for display
+          if (dateText.includes('-')) {
+            const [y, m, d] = dateText.split('-');
+            dateText = `${d}/${m}/${y}`;
+          }
+          
           const textMetrics = ctx.measureText(dateText);
           const margin = (canvas.width * 2) / 100;
 
@@ -605,14 +611,25 @@ export default function App() {
 
             {state.config.dateEnabled && (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">Date</span>
-                  <input 
-                    type="date"
-                    value={state.config.customDate}
-                    onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, customDate: e.target.value } }))}
-                    className="bg-bg border border-border text-[11px] p-1 rounded w-32 focus:outline-accent text-white"
-                  />
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs text-text-dim uppercase">
+                    <span>Date personnalisée</span>
+                    <button 
+                      onClick={() => setState(prev => ({ ...prev, config: { ...prev.config, customDate: new Date().toISOString().split('T')[0] } }))}
+                      className="text-accent hover:underline lowercase font-normal"
+                    >
+                      Aujourd'hui
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" />
+                    <input 
+                      type="date"
+                      value={state.config.customDate}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, customDate: e.target.value } }))}
+                      className="w-full bg-bg border border-border text-sm py-2 pl-10 pr-3 rounded focus:outline-accent text-white"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex justify-between items-center">
