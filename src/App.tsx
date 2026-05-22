@@ -569,11 +569,11 @@ export default function App() {
           </div>
           <div className="flex flex-col">
             <div className="text-white text-lg font-extrabold tracking-tight">SnapMark Studio</div>
-            <div className="text-[9px] text-text-dim uppercase tracking-wider font-mono">Filigranes en lot premium</div>
+            <div className="text-xs text-text-dim uppercase tracking-wider font-mono">Filigranes en lot premium</div>
           </div>
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 bg-accent/10 border border-accent/20 rounded-full ml-2">
             <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
-            <span className="text-[9px] text-accent font-bold uppercase tracking-wider font-mono">Telegram Bot Actif</span>
+            <span className="text-xs text-accent font-bold uppercase tracking-wider font-mono">Telegram Bot Actif</span>
           </div>
         </div>
         <div className="text-text-dim text-xs font-mono bg-white/5 border border-white/5 px-3 py-1 rounded-lg">
@@ -597,7 +597,7 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-accent" />
-              <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">1. Source des médias</h2>
+              <h2 className="text-sm font-bold text-text-dim uppercase tracking-wider">1. Source des médias</h2>
             </div>
             
             <div className="flex flex-col gap-2">
@@ -619,7 +619,7 @@ export default function App() {
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
                   />
-                  <button className="w-full bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 font-semibold py-2 rounded-lg text-xs transition-all active:scale-[0.98] cursor-pointer shadow-sm">
+                  <button className="w-full bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 font-semibold py-2 rounded-lg text-sm transition-all active:scale-[0.98] cursor-pointer shadow-sm">
                     Fichiers
                   </button>
                 </div>
@@ -632,7 +632,7 @@ export default function App() {
                     onChange={handleFolderSelect}
                     className="absolute inset-0 opacity-0 cursor-pointer z-10"
                   />
-                  <button className="w-full bg-accent text-black font-semibold py-2 rounded-lg text-xs transition-all hover:bg-accent-light active:scale-[0.98] cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                  <button className="w-full bg-accent text-black font-semibold py-2 rounded-lg text-sm transition-all hover:bg-accent-light active:scale-[0.98] cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.15)]">
                     Dossier
                   </button>
                 </div>
@@ -643,7 +643,7 @@ export default function App() {
               <div className="text-xs font-mono truncate text-text">
                 {state.photos.length > 0 ? `photos/${state.photos[0].webkitRelativePath ? state.photos[0].webkitRelativePath.split('/')[0] : 'fichiers_charges'}` : '/aucun_dossier'}
               </div>
-              <div className="text-[11px] text-text-dim mt-1 font-mono">
+              <div className="text-xs text-text-dim mt-1 font-mono">
                 {state.photos.length} images importées
               </div>
             </div>
@@ -656,11 +656,11 @@ export default function App() {
           >
             <div className="flex items-center gap-2">
               <Settings2 className="w-4 h-4 text-accent" />
-              <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">2. Configuration Logo</h2>
+              <h2 className="text-sm font-bold text-text-dim uppercase tracking-wider">2. Configuration Logo</h2>
             </div>
             
             <div className="flex justify-between items-center">
-              <span className="text-xs text-text-dim uppercase">Fichier Logo</span>
+              <span className="text-sm text-text-dim uppercase">Fichier Logo</span>
               <div className="relative">
                 <input
                   type="file"
@@ -668,7 +668,7 @@ export default function App() {
                   onChange={handleLogoUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer z-10"
                 />
-                <button className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg hover:border-accent hover:text-accent transition-all active:scale-[0.95] cursor-pointer">
+                <button className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg hover:border-accent hover:text-accent transition-all active:scale-[0.95] cursor-pointer">
                   <Plus className="w-3 h-3" /> Ajouter
                 </button>
               </div>
@@ -718,7 +718,7 @@ export default function App() {
                         </button>
                       )}
                       {isSelected && (
-                        <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-bg">
+                        <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold border border-bg">
                           {state.config.logoIds.length > 1 ? selectionIndex + 1 : <CheckCircle2 className="w-2.5 h-2.5 text-black" />}
                         </div>
                       )}
@@ -730,11 +730,11 @@ export default function App() {
 
             <div className="space-y-4 pt-2 border-t border-white/5">
               <div className="flex justify-between items-center">
-                <span className="text-xs text-text-dim uppercase">Position</span>
+                <span className="text-sm text-text-dim uppercase">Position</span>
                 <select 
                   value={state.config.logoPosition}
                   onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoPosition: e.target.value as Position } }))}
-                  className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
+                  className="text-sm p-1.5 rounded-lg w-32 focus:outline-accent text-white"
                 >
                   <option value="bottom-right">Bas-Droite</option>
                   <option value="bottom-left">Bas-Gauche</option>
@@ -747,7 +747,7 @@ export default function App() {
               </div>
 
               <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-text-dim uppercase">
+                <div className="flex justify-between text-xs text-text-dim uppercase">
                   <span>Opacité</span>
                   <span>{Math.round(state.config.logoOpacity * 100)}%</span>
                 </div>
@@ -759,14 +759,14 @@ export default function App() {
               </div>
 
               <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-text-dim uppercase">
+                <div className="flex justify-between text-xs text-text-dim uppercase">
                   <span>Taille</span>
                   <div className="flex items-center gap-2">
                     <input 
                       type="number"
                       value={state.config.logoScale}
                       onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoScale: Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) } }))}
-                      className="w-10 bg-black/40 border border-white/5 text-[10px] text-center rounded focus:outline-accent text-white py-0.5"
+                      className="w-10 bg-black/40 border border-white/5 text-xs text-center rounded focus:outline-accent text-white py-0.5"
                     />
                     <span>%</span>
                   </div>
@@ -803,7 +803,7 @@ export default function App() {
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                   className="relative w-full h-full flex items-center justify-center"
                 >
-                  <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md border border-white/10 text-text px-2.5 py-1 rounded-md text-[10px] font-mono shadow-md z-20 select-none">
+                  <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md border border-white/10 text-text px-2.5 py-1 rounded-md text-xs font-mono shadow-md z-20 select-none">
                     {state.photos[selectedPhotoIndex]?.name}
                   </div>
                   
@@ -825,7 +825,7 @@ export default function App() {
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <span className="text-xs font-mono px-1">
+                    <span className="text-sm font-mono px-1">
                       {selectedPhotoIndex + 1} / {state.photos.length}
                     </span>
                     <button
@@ -841,8 +841,8 @@ export default function App() {
               ) : (
                 <div className="flex flex-col items-center gap-3 text-text-dim/35 select-none">
                   <ImageIcon className="w-12 h-12 text-text-dim/40" />
-                  <span className="text-xs uppercase tracking-widest font-bold font-sans">Aucun média chargé</span>
-                  <p className="text-[10px] text-text-dim/60 font-mono text-center max-w-[200px]">
+                  <span className="text-sm uppercase tracking-widest font-bold font-sans">Aucun média chargé</span>
+                  <p className="text-xs text-text-dim/60 font-mono text-center max-w-[240px]">
                     Sélectionnez ou glissez-déposez des photos pour commencer
                   </p>
                 </div>
@@ -859,14 +859,14 @@ export default function App() {
               <div className="flex justify-between items-center border-b border-white/5 pb-2">
                 <div className="flex items-center gap-2">
                   <FolderOpen className="w-4 h-4 text-accent" />
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-text-dim">Explorateur de lot ({state.photos.length} fichiers)</span>
+                  <span className="text-xs uppercase tracking-wider font-bold text-text-dim">Explorateur de lot ({state.photos.length} fichiers)</span>
                 </div>
                 <button 
                   onClick={() => {
                     setState(p => ({ ...p, photos: [] }));
                     setSelectedPhotoIndex(0);
                   }}
-                  className="text-[10px] text-red-400 hover:text-red-300 font-semibold uppercase tracking-wider transition-colors cursor-pointer"
+                  className="text-xs text-red-400 hover:text-red-300 font-semibold uppercase tracking-wider transition-colors cursor-pointer"
                 >
                   Tout vider
                 </button>
@@ -895,7 +895,7 @@ export default function App() {
                           <span className="text-xs font-mono truncate">{photo.name}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-[10px] text-text-dim font-mono flex-shrink-0">
+                          <span className="text-xs text-text-dim font-mono flex-shrink-0">
                             {(photo.size / 1024).toFixed(0)} KB
                           </span>
                           <button 
@@ -939,7 +939,7 @@ export default function App() {
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-accent" />
-                <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">3. Horodatage</h2>
+                <h2 className="text-sm font-bold text-text-dim uppercase tracking-wider">3. Horodatage</h2>
               </div>
               <input 
                 type="checkbox" 
@@ -959,11 +959,11 @@ export default function App() {
                   className="overflow-hidden space-y-4 pt-1"
                 >
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-text-dim uppercase">Source</span>
+                    <span className="text-sm text-text-dim uppercase">Source</span>
                     <select 
                       value={state.config.dateFormat}
                       onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, dateFormat: e.target.value as 'current' | 'original' } }))}
-                      className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
+                      className="text-sm p-1.5 rounded-lg w-32 focus:outline-accent text-white"
                     >
                       <option value="current">Personnalisée</option>
                       <option value="original">Origine</option>
@@ -972,7 +972,7 @@ export default function App() {
 
                   {state.config.dateFormat === 'current' ? (
                     <div className="space-y-2">
-                      <div className="flex justify-between items-center text-[10px] text-text-dim uppercase">
+                      <div className="flex justify-between items-center text-xs text-text-dim uppercase">
                         <span>Date personnalisée</span>
                         <button 
                           onClick={() => setState(prev => ({ ...prev, config: { ...prev.config, customDate: new Date().toISOString().split('T')[0] } }))}
@@ -987,22 +987,22 @@ export default function App() {
                           type="date"
                           value={state.config.customDate}
                           onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, customDate: e.target.value } }))}
-                          className="w-full text-xs py-2 pl-9 pr-3 rounded-lg focus:outline-accent text-white font-mono"
+                          className="w-full text-sm py-2 pl-9 pr-3 rounded-lg focus:outline-accent text-white font-mono"
                         />
                       </div>
                     </div>
                   ) : (
-                    <div className="text-[10px] text-text-dim bg-black/40 border border-white/5 rounded-lg p-2.5 font-mono leading-relaxed">
+                    <div className="text-xs text-text-dim bg-black/40 border border-white/5 rounded-lg p-2.5 font-mono leading-relaxed">
                       Date de modification de l'image (ex: {state.photos.length > 0 && state.photos[selectedPhotoIndex] ? new Date(state.photos[selectedPhotoIndex].lastModified).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}).
                     </div>
                   )}
 
                   <div className="flex justify-between items-center border-t border-white/5 pt-3">
-                    <span className="text-xs text-text-dim uppercase">Position</span>
+                    <span className="text-sm text-text-dim uppercase">Position</span>
                     <select 
                       value={state.config.datePosition}
                       onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, datePosition: e.target.value as Position } }))}
-                      className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
+                      className="text-sm p-1.5 rounded-lg w-32 focus:outline-accent text-white"
                     >
                       <option value="top-left">Haut-Gauche</option>
                       <option value="top-right">Haut-Droite</option>
@@ -1025,7 +1025,7 @@ export default function App() {
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Layout className="w-4 h-4 text-accent" />
-                <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">3b. Filigrane Textuel</h2>
+                <h2 className="text-sm font-bold text-text-dim uppercase tracking-wider">3b. Filigrane Textuel</h2>
               </div>
               <input 
                 type="checkbox" 
@@ -1045,22 +1045,22 @@ export default function App() {
                   className="overflow-hidden space-y-4 pt-1"
                 >
                   <div className="space-y-2">
-                    <span className="text-[10px] text-text-dim uppercase">Texte du filigrane</span>
+                    <span className="text-xs text-text-dim uppercase">Texte du filigrane</span>
                     <input 
                       type="text"
                       value={state.config.textValue}
                       onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textValue: e.target.value } }))}
                       placeholder="ex: © 2026 Studio"
-                      className="w-full text-xs py-2 px-3 rounded-lg focus:outline-accent text-white"
+                      className="w-full text-sm py-2 px-3 rounded-lg focus:outline-accent text-white"
                     />
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-text-dim uppercase">Position</span>
+                    <span className="text-sm text-text-dim uppercase">Position</span>
                     <select 
                       value={state.config.textPosition}
                       onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textPosition: e.target.value as Position } }))}
-                      className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
+                      className="text-sm p-1.5 rounded-lg w-32 focus:outline-accent text-white"
                     >
                       <option value="bottom-left">Bas-Gauche</option>
                       <option value="bottom-right">Bas-Droite</option>
@@ -1073,7 +1073,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-text-dim uppercase">
+                    <div className="flex justify-between text-xs text-text-dim uppercase">
                       <span>Opacité</span>
                       <span>{Math.round(state.config.textOpacity * 100)}%</span>
                     </div>
@@ -1085,7 +1085,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-1">
-                    <div className="flex justify-between text-[11px] text-text-dim uppercase">
+                    <div className="flex justify-between text-xs text-text-dim uppercase">
                       <span>Taille</span>
                       <span>{state.config.textScale}</span>
                     </div>
@@ -1097,7 +1097,7 @@ export default function App() {
                   </div>
 
                   <div className="flex justify-between items-center">
-                    <span className="text-xs text-text-dim uppercase">Couleur</span>
+                    <span className="text-sm text-text-dim uppercase">Couleur</span>
                     <input 
                       type="color"
                       value={state.config.textColor}
@@ -1115,13 +1115,13 @@ export default function App() {
             variants={itemVariants}
             className="glass-panel glass-panel-hover rounded-xl p-5 flex flex-col gap-4 flex-1 shadow-lg transition-all duration-300"
           >
-            <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">Statut du lot</h2>
+            <h2 className="text-sm font-bold text-text-dim uppercase tracking-wider">Statut du lot</h2>
             
             <div className="flex-1 flex flex-col justify-center items-center py-4">
               <div className="text-4xl font-extrabold text-accent tracking-tighter glow-accent">
                 {state.progress}%
               </div>
-              <div className="text-[10px] text-text-dim mt-2 uppercase tracking-widest font-bold font-sans">
+              <div className="text-xs text-text-dim mt-2 uppercase tracking-widest font-bold font-sans">
                 {state.processing ? 'Traitement...' : 'Prêt'}
               </div>
             </div>
@@ -1154,7 +1154,7 @@ export default function App() {
 
       {/* Footer Actions */}
       <footer className="flex justify-between items-center border-t border-white/5 pt-4 mt-2">
-        <div className="flex items-center text-[11px] text-text-dim gap-2 font-mono">
+        <div className="flex items-center text-xs text-text-dim gap-2 font-mono">
           <Settings2 className="w-3.5 h-3.5 text-accent animate-spin" style={{ animationDuration: '6s' }} />
           Destination : /photos_marquees.zip
         </div>
@@ -1164,7 +1164,7 @@ export default function App() {
               setState(p => ({ ...p, photos: [], logo: null, logoPreview: null }));
               setSelectedPhotoIndex(0);
             }}
-            className="text-[11px] font-bold uppercase tracking-wider px-4 py-2 border border-white/10 rounded-lg hover:bg-white/5 transition-all cursor-pointer"
+            className="text-xs font-bold uppercase tracking-wider px-4 py-2 border border-white/10 rounded-lg hover:bg-white/5 transition-all cursor-pointer"
           >
             Réinitialiser
           </button>
