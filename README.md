@@ -2,7 +2,6 @@
 
 **SnapMark Studio** est une solution complète de marquage d'images (filigrane) conçue pour apposer des logos et des dates de manière dynamique et performante. L'application propose deux canaux d'utilisation complémentaires : une **interface web interactive** pour le traitement par lot côté client, et un **bot Telegram** pour un marquage rapide en déplacement.
 
-Visualisez votre application dans AI Studio : https://ai.studio/apps/86d96f6f-e80f-4e2d-8384-f00c4a7e4181
 
 ---
 
