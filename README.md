@@ -1,7 +1,3 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
-
 # SnapMark Studio (PixelStamp) 📸
 
 **SnapMark Studio** est une solution complète de marquage d'images (filigrane) conçue pour apposer des logos et des dates de manière dynamique et performante. L'application propose deux canaux d'utilisation complémentaires : une **interface web interactive** pour le traitement par lot côté client, et un **bot Telegram** pour un marquage rapide en déplacement.
