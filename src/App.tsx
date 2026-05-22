@@ -17,7 +17,9 @@ import {
   Loader2,
   FolderOpen,
   Settings2,
-  Maximize2
+  Maximize2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import JSZip from 'jszip';
@@ -51,6 +53,12 @@ interface AppState {
     fontColor: string;
     dateFormat: 'current' | 'original';
     customDate: string;
+    textEnabled: boolean;
+    textValue: string;
+    textPosition: Position;
+    textScale: number;
+    textOpacity: number;
+    textColor: string;
   }
 }
 
@@ -69,6 +77,35 @@ const DEFAULT_CONFIG = {
   dateFormat: 'current' as const,
   customDate: new Date().toISOString().split('T')[0],
   logoIds: [] as string[],
+  textEnabled: false,
+  textValue: '',
+  textPosition: 'bottom-left' as Position,
+  textScale: 50,
+  textOpacity: 0.8,
+  textColor: '#ffffff',
+};
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 15 },
+  show: { 
+    opacity: 1, 
+    y: 0,
+    transition: {
+      type: 'spring',
+      stiffness: 120,
+      damping: 14
+    }
+  }
 };
 
 export default function App() {
@@ -104,6 +141,8 @@ export default function App() {
       config: savedConfig ? { ...DEFAULT_CONFIG, ...JSON.parse(savedConfig) } : DEFAULT_CONFIG
     };
   });
+
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number>(0);
 
   // Handle migration from logoId to logoIds if needed
   useEffect(() => {
@@ -163,7 +202,41 @@ export default function App() {
     return () => { isMounted = false; };
   }, []); // Only run once on mount to avoid duplicates
 
+  // Bounds safety when photos change
+  useEffect(() => {
+    if (selectedPhotoIndex >= state.photos.length) {
+      setSelectedPhotoIndex(Math.max(0, state.photos.length - 1));
+    }
+  }, [state.photos, selectedPhotoIndex]);
+
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = (Array.from(e.dataTransfer.files) as File[])
+        .filter(file => file.type.startsWith('image/'))
+        .sort((a, b) => a.lastModified - b.lastModified);
+        
+      if (filesArray.length > 0) {
+        setState(prev => ({ ...prev, photos: filesArray }));
+        setSelectedPhotoIndex(0);
+      }
+    }
+  };
 
   // Handle Directory Selection
   const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,7 +245,10 @@ export default function App() {
         .filter(file => file.type.startsWith('image/'))
         .sort((a, b) => a.lastModified - b.lastModified);
       
-      setState(prev => ({ ...prev, photos: filesArray }));
+      if (filesArray.length > 0) {
+        setState(prev => ({ ...prev, photos: filesArray }));
+        setSelectedPhotoIndex(0);
+      }
     }
   };
 
@@ -297,7 +373,13 @@ export default function App() {
           ctx.shadowOffsetX = 2;
           ctx.shadowOffsetY = 2;
 
-          let dateText = config.customDate || new Date().toISOString().split('T')[0];
+          let dateText = "";
+          if (config.dateFormat === 'original') {
+            const dObj = new Date(photo.lastModified);
+            dateText = dObj.toISOString().split('T')[0];
+          } else {
+            dateText = config.customDate || new Date().toISOString().split('T')[0];
+          }
           // Format YYYY-MM-DD to DD/MM/YYYY for display
           if (dateText.includes('-')) {
             const [y, m, d] = dateText.split('-');
@@ -323,10 +405,45 @@ export default function App() {
           ctx.fillText(dateText, x, y);
         }
 
+        // Draw Text Watermark
+        if (config.textEnabled && config.textValue) {
+          ctx.save();
+          ctx.globalAlpha = config.textOpacity;
+          
+          const textFontSize = (canvas.width * config.textScale) / 2000;
+          ctx.font = `bold ${textFontSize}px sans-serif`;
+          ctx.fillStyle = config.textColor;
+          
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 2;
+          ctx.shadowOffsetY = 2;
+
+          const textMetrics = ctx.measureText(config.textValue);
+          const textMargin = (canvas.width * 2) / 100;
+
+          let tx = 0;
+          let ty = 0;
+
+          switch (config.textPosition) {
+            case 'top-left': tx = textMargin; ty = textMargin + textFontSize; break;
+            case 'top-right': tx = canvas.width - textMetrics.width - textMargin; ty = textMargin + textFontSize; break;
+            case 'top-center': tx = (canvas.width - textMetrics.width) / 2; ty = textMargin + textFontSize; break;
+            case 'bottom-left': tx = textMargin; ty = canvas.height - textMargin; break;
+            case 'bottom-right': tx = canvas.width - textMetrics.width - textMargin; ty = canvas.height - textMargin; break;
+            case 'bottom-center': tx = (canvas.width - textMetrics.width) / 2; ty = canvas.height - textMargin; break;
+            case 'center': tx = (canvas.width - textMetrics.width) / 2; ty = (canvas.height + textFontSize) / 2; break;
+          }
+
+          ctx.fillText(config.textValue, tx, ty);
+          ctx.restore();
+        }
+
+        const mimeType = photo.type || 'image/jpeg';
         canvas.toBlob((blob) => {
           if (blob) resolve(blob);
           else reject('Blob conversion failed');
-        }, 'image/jpeg', 0.9);
+        }, mimeType, mimeType === 'image/png' ? undefined : 0.9);
       };
       img.onerror = reject;
       img.src = URL.createObjectURL(photo);
@@ -335,7 +452,10 @@ export default function App() {
 
   // Update Preview
   useEffect(() => {
-    if (state.photos.length > 0) {
+    let active = true;
+    let currentUrl: string | null = null;
+    
+    if (state.photos.length > 0 && selectedPhotoIndex < state.photos.length) {
       const updatePreview = async () => {
         const logoImgs: HTMLImageElement[] = [];
         
@@ -344,14 +464,19 @@ export default function App() {
           if (logoData) {
             const logoImg = new Image();
             logoImg.src = logoData;
-            await new Promise(r => logoImg!.onload = r);
+            await new Promise(r => logoImg.onload = r);
             logoImgs.push(logoImg);
           }
         }
 
         try {
-          const processedBlob = await processImage(state.photos[0], logoImgs, state.config);
-          setPreviewSrc(URL.createObjectURL(processedBlob));
+          const currentPhoto = state.photos[selectedPhotoIndex];
+          const processedBlob = await processImage(currentPhoto, logoImgs, state.config);
+          if (active) {
+            const url = URL.createObjectURL(processedBlob);
+            currentUrl = url;
+            setPreviewSrc(url);
+          }
         } catch (e) {
           console.error('Preview error:', e);
         }
@@ -360,7 +485,14 @@ export default function App() {
     } else {
       setPreviewSrc(null);
     }
-  }, [state.photos, state.savedLogos, state.config, processImage]);
+
+    return () => {
+      active = false;
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
+  }, [state.photos, selectedPhotoIndex, state.savedLogos, state.config, processImage]);
 
   const startProcessing = async () => {
     if (state.photos.length === 0) return;
@@ -386,7 +518,13 @@ export default function App() {
         const processedBlob = await processImage(photo, logoImgs, state.config);
         // Ajout d'un index numérique pour préserver l'ordre chronologique
         const index = (i + 1).toString().padStart(3, '0');
-        zip.file(`${index}_${photo.name}`, processedBlob);
+        const baseName = photo.name.substring(0, photo.name.lastIndexOf('.'));
+        
+        // Ensure proper filename extension matching output format
+        const outputMime = photo.type || 'image/jpeg';
+        const finalExtension = outputMime === 'image/png' ? '.png' : (outputMime === 'image/webp' ? '.webp' : '.jpg');
+        
+        zip.file(`${index}_${baseName}${finalExtension}`, processedBlob);
         
         setState(prev => ({ ...prev, progress: Math.round(((i + 1) / state.photos.length) * 100) }));
       }
@@ -402,59 +540,127 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-text p-6 flex flex-col gap-6 max-w-[1400px] mx-auto overflow-hidden">
+    <div 
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="min-h-screen bg-bg text-text p-4 md:p-6 flex flex-col gap-6 max-w-[1440px] mx-auto relative overflow-y-auto custom-scrollbar"
+    >
+      <AnimatePresence>
+        {isDragging && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-bg/85 backdrop-blur-md z-50 flex flex-col items-center justify-center gap-4 pointer-events-none border-4 border-dashed border-accent m-4 rounded-xl"
+          >
+            <Upload className="w-16 h-16 text-accent animate-bounce" />
+            <div className="text-xl font-bold uppercase tracking-wider text-accent">Déposez vos photos ici</div>
+            <div className="text-xs text-text-dim font-mono">JPG, PNG, WEBP supportés</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
-      <header className="flex justify-between items-center border-b border-border pb-4">
-        <div className="flex items-center gap-4">
-          <div className="text-accent text-xl font-bold tracking-tighter">PIXELSTAMP v1.0</div>
-          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-accent/10 border border-accent/20 rounded-full">
-            <span className="w-2 h-2 bg-accent rounded-full animate-pulse" />
-            <span className="text-[10px] text-accent font-bold uppercase tracking-widest">Bot Telegram Actif</span>
+      <header className="flex justify-between items-center border-b border-white/5 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 bg-accent/10 border border-accent/20 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.05)]">
+            <ImageIcon className="w-5 h-5 text-accent" />
+          </div>
+          <div className="flex flex-col">
+            <div className="text-white text-lg font-extrabold tracking-tight">SnapMark Studio</div>
+            <div className="text-[9px] text-text-dim uppercase tracking-wider font-mono">Filigranes en lot premium</div>
+          </div>
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 bg-accent/10 border border-accent/20 rounded-full ml-2">
+            <span className="w-1.5 h-1.5 bg-accent rounded-full animate-pulse" />
+            <span className="text-[9px] text-accent font-bold uppercase tracking-wider font-mono">Telegram Bot Actif</span>
           </div>
         </div>
-        <div className="text-text-dim text-xs font-mono">
+        <div className="text-text-dim text-xs font-mono bg-white/5 border border-white/5 px-3 py-1 rounded-lg">
           Session : {new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
         </div>
       </header>
 
       {/* Main Grid */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[320px_1fr_240px] gap-4">
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[330px_1fr_290px] gap-6">
         {/* Left Columns: Inputs */}
-        <div className="flex flex-col gap-4 overflow-y-auto pr-2">
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col gap-6 overflow-y-auto pr-1 custom-scrollbar"
+        >
           {/* Card 1: Media Source */}
-          <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
-            <h2 className="text-[11px] font-semibold text-text-dim uppercase tracking-wider">1. Source des médias</h2>
+          <motion.section 
+            variants={itemVariants}
+            className="glass-panel glass-panel-hover rounded-xl p-5 flex flex-col gap-4 shadow-lg transition-all duration-300"
+          >
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-4 h-4 text-accent" />
+              <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">1. Source des médias</h2>
+            </div>
             
-            <div className="relative group">
-              <input
-                type="file"
-                multiple
-                //@ts-ignore
-                webkitdirectory=""
-                onChange={handleFolderSelect}
-                className="absolute inset-0 opacity-0 cursor-pointer z-10"
-              />
-              <button className="w-full bg-accent text-black font-bold py-2.5 rounded-md text-sm hover:opacity-90 transition-opacity">
-                Choisir Dossier
-              </button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      if (e.target.files) {
+                        const filesArray = (Array.from(e.target.files) as File[])
+                          .filter(file => file.type.startsWith('image/'))
+                          .sort((a, b) => a.lastModified - b.lastModified);
+                        if (filesArray.length > 0) {
+                          setState(prev => ({ ...prev, photos: filesArray }));
+                          setSelectedPhotoIndex(0);
+                        }
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                  />
+                  <button className="w-full bg-white/5 hover:bg-white/10 text-white border border-white/10 hover:border-white/20 font-semibold py-2 rounded-lg text-xs transition-all active:scale-[0.98] cursor-pointer shadow-sm">
+                    Fichiers
+                  </button>
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    type="file"
+                    multiple
+                    //@ts-ignore
+                    webkitdirectory=""
+                    onChange={handleFolderSelect}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                  />
+                  <button className="w-full bg-accent text-black font-semibold py-2 rounded-lg text-xs transition-all hover:bg-accent-light active:scale-[0.98] cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+                    Dossier
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div className="bg-black/20 border border-border/50 border-dashed rounded-lg p-3">
-              <div className="text-sm font-medium truncate">
-                {state.photos.length > 0 ? `photos/${state.photos[0].webkitRelativePath.split('/')[0]}` : '/aucun_dossier'}
+            <div className="bg-black/30 border border-white/5 rounded-lg p-3">
+              <div className="text-xs font-mono truncate text-text">
+                {state.photos.length > 0 ? `photos/${state.photos[0].webkitRelativePath ? state.photos[0].webkitRelativePath.split('/')[0] : 'fichiers_charges'}` : '/aucun_dossier'}
               </div>
-              <div className="text-xs text-text-dim mt-1">
-                {state.photos.length} images détectées (JPG, PNG)
+              <div className="text-[11px] text-text-dim mt-1 font-mono">
+                {state.photos.length} images importées
               </div>
             </div>
-          </section>
+          </motion.section>
 
           {/* Card 2: Logo Config */}
-          <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
-            <h2 className="text-[11px] font-semibold text-text-dim uppercase tracking-wider">2. Configuration Logo</h2>
+          <motion.section 
+            variants={itemVariants}
+            className="glass-panel glass-panel-hover rounded-xl p-5 flex flex-col gap-4 shadow-lg transition-all duration-300"
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-accent" />
+              <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">2. Configuration Logo</h2>
+            </div>
             
             <div className="flex justify-between items-center">
-              <span className="text-sm">Fichier Logo</span>
+              <span className="text-xs text-text-dim uppercase">Fichier Logo</span>
               <div className="relative">
                 <input
                   type="file"
@@ -462,63 +668,73 @@ export default function App() {
                   onChange={handleLogoUpload}
                   className="absolute inset-0 opacity-0 cursor-pointer z-10"
                 />
-                <button className="flex items-center gap-2 text-[11px] font-semibold px-2 py-1 border border-border rounded hover:border-accent hover:text-accent transition-colors">
+                <button className="flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1.5 bg-white/5 border border-white/10 rounded-lg hover:border-accent hover:text-accent transition-all active:scale-[0.95] cursor-pointer">
                   <Plus className="w-3 h-3" /> Ajouter
                 </button>
               </div>
             </div>
 
             {/* Saved Logos Gallery */}
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none custom-scrollbar group/gallery">
-              <div 
+            <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar group/gallery">
+              <motion.div 
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setState(prev => ({ ...prev, config: { ...prev.config, logoIds: [] } }))}
                 className={`
                   relative flex-shrink-0 w-12 h-12 rounded-lg border border-dashed cursor-pointer transition-all flex items-center justify-center
-                  ${state.config.logoIds.length === 0 ? 'border-accent bg-accent/10' : 'border-border hover:border-text-dim/50'}
+                  ${state.config.logoIds.length === 0 ? 'border-accent bg-accent/15' : 'border-white/10 hover:border-white/30'}
                 `}
+                title="Désactiver le logo"
               >
                 <X className="w-5 h-5 text-text-dim" />
-              </div>
+              </motion.div>
 
-              {state.savedLogos.map((logo) => {
-                const selectionIndex = state.config.logoIds.indexOf(logo.id);
-                const isSelected = selectionIndex !== -1;
-                
-                return (
-                  <div 
-                    key={logo.id}
-                    onClick={() => selectSavedLogo(logo)}
-                    className={`
-                      relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1
-                      ${isSelected ? 'border-accent bg-accent/10 scale-105' : 'border-border hover:border-text-dim/50'}
-                    `}
-                  >
-                    <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
-                    {logo.id !== 'default-system-logo' && (
-                      <button 
-                        onClick={(e) => deleteSavedLogo(logo.id, e)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover/item:opacity-100 hover:scale-110 transition-all z-20 shadow-lg"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                    {isSelected && (
-                      <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border-2 border-bg">
-                        {state.config.logoIds.length > 1 ? selectionIndex + 1 : <CheckCircle2 className="w-2 h-2" />}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              <AnimatePresence initial={false}>
+                {state.savedLogos.map((logo) => {
+                  const selectionIndex = state.config.logoIds.indexOf(logo.id);
+                  const isSelected = selectionIndex !== -1;
+                  
+                  return (
+                    <motion.div 
+                      key={logo.id}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => selectSavedLogo(logo)}
+                      className={`
+                        relative group/item flex-shrink-0 w-12 h-12 rounded-lg border cursor-pointer transition-all p-1 flex items-center justify-center bg-black/20
+                        ${isSelected ? 'border-accent bg-accent/10 scale-105 shadow-[0_0_10px_rgba(16,185,129,0.15)]' : 'border-white/10 hover:border-white/30'}
+                      `}
+                    >
+                      <img src={logo.data} alt={logo.name} className="w-full h-full object-contain" />
+                      {logo.id !== 'default-system-logo' && (
+                        <button 
+                          onClick={(e) => deleteSavedLogo(logo.id, e)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover/item:opacity-100 hover:scale-110 transition-all z-20 shadow-lg cursor-pointer"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      )}
+                      {isSelected && (
+                        <div className="absolute -bottom-1 -right-1 bg-accent text-black rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold border border-bg">
+                          {state.config.logoIds.length > 1 ? selectionIndex + 1 : <CheckCircle2 className="w-2.5 h-2.5 text-black" />}
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
 
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4 pt-2 border-t border-white/5">
               <div className="flex justify-between items-center">
-                <span className="text-sm">Position</span>
+                <span className="text-xs text-text-dim uppercase">Position</span>
                 <select 
                   value={state.config.logoPosition}
                   onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoPosition: e.target.value as Position } }))}
-                  className="bg-bg border border-border text-xs p-1.5 rounded w-32 focus:outline-accent"
+                  className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
                 >
                   <option value="bottom-right">Bas-Droite</option>
                   <option value="bottom-left">Bas-Gauche</option>
@@ -538,7 +754,7 @@ export default function App() {
                 <input 
                   type="range" min="0.1" max="1" step="0.1" value={state.config.logoOpacity}
                   onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoOpacity: parseFloat(e.target.value) } }))}
-                  className="w-full h-1 bg-bg border border-border appearance-none rounded-full accent-accent"
+                  className="w-full cursor-pointer"
                 />
               </div>
 
@@ -550,7 +766,7 @@ export default function App() {
                       type="number"
                       value={state.config.logoScale}
                       onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoScale: Math.max(1, Math.min(100, parseInt(e.target.value) || 1)) } }))}
-                      className="w-10 bg-bg border border-border text-[10px] text-center rounded focus:outline-accent"
+                      className="w-10 bg-black/40 border border-white/5 text-[10px] text-center rounded focus:outline-accent text-white py-0.5"
                     />
                     <span>%</span>
                   </div>
@@ -558,49 +774,173 @@ export default function App() {
                 <input 
                   type="range" min="1" max="100" value={state.config.logoScale}
                   onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, logoScale: parseInt(e.target.value) } }))}
-                  className="w-full h-1 bg-bg border border-border appearance-none rounded-full accent-accent cursor-pointer"
+                  className="w-full cursor-pointer"
                 />
               </div>
             </div>
-          </section>
-        </div>
+          </motion.section>
+        </motion.div>
 
-        {/* Center Column: Preview */}
-        <section className="bg-black border border-border rounded-xl relative flex items-center justify-center overflow-hidden min-h-[400px]">
-          <AnimatePresence mode="wait">
-            {previewSrc ? (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="relative w-[90%] h-[90%] flex items-center justify-center"
-              >
-                <img 
-                  src={previewSrc} 
-                  alt="Aperçu" 
-                  className="max-w-full max-h-full object-contain rounded-sm shadow-2xl"
-                />
-                <div className="absolute bottom-[-30px] left-1/2 -translate-x-1/2 text-text-dim text-[11px] whitespace-nowrap">
-                  Aperçu : {state.photos[0].name} (1/{state.photos.length})
+        {/* Center Column: Preview & File Explorer */}
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col gap-6"
+        >
+          {/* Workspace Box */}
+          <motion.section 
+            variants={itemVariants}
+            className="glass-panel rounded-xl relative flex-1 flex items-center justify-center overflow-hidden min-h-[440px] p-6 shadow-xl"
+          >
+            <AnimatePresence mode="wait">
+              {previewSrc ? (
+                <motion.div 
+                  key={selectedPhotoIndex}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  transition={{ duration: 0.15, ease: 'easeOut' }}
+                  className="relative w-full h-full flex items-center justify-center"
+                >
+                  <div className="absolute top-3 left-3 bg-black/75 backdrop-blur-md border border-white/10 text-text px-2.5 py-1 rounded-md text-[10px] font-mono shadow-md z-20 select-none">
+                    {state.photos[selectedPhotoIndex]?.name}
+                  </div>
+                  
+                  <div className="transparency-grid relative rounded-lg border border-white/5 shadow-2xl p-1 overflow-hidden flex items-center justify-center">
+                    <img 
+                      src={previewSrc} 
+                      alt="Aperçu" 
+                      className="max-w-full max-h-[58vh] object-contain rounded-md"
+                    />
+                  </div>
+
+                  {/* Floating navigation overlay */}
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/85 backdrop-blur-md px-4 py-2 border border-white/10 rounded-full shadow-lg z-20 select-none">
+                    <button
+                      disabled={state.photos.length <= 1 || selectedPhotoIndex === 0}
+                      onClick={() => setSelectedPhotoIndex(p => Math.max(0, p - 1))}
+                      className="p-1 rounded-full hover:bg-white/10 text-text disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
+                      title="Photo précédente"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <span className="text-xs font-mono px-1">
+                      {selectedPhotoIndex + 1} / {state.photos.length}
+                    </span>
+                    <button
+                      disabled={state.photos.length <= 1 || selectedPhotoIndex === state.photos.length - 1}
+                      onClick={() => setSelectedPhotoIndex(p => Math.min(state.photos.length - 1, p + 1))}
+                      className="p-1 rounded-full hover:bg-white/10 text-text disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer"
+                      title="Photo suivante"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 text-text-dim/35 select-none">
+                  <ImageIcon className="w-12 h-12 text-text-dim/40" />
+                  <span className="text-xs uppercase tracking-widest font-bold font-sans">Aucun média chargé</span>
+                  <p className="text-[10px] text-text-dim/60 font-mono text-center max-w-[200px]">
+                    Sélectionnez ou glissez-déposez des photos pour commencer
+                  </p>
                 </div>
-              </motion.div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 text-text-dim/30">
-                <ImageIcon className="w-12 h-12" />
-                <span className="text-xs uppercase tracking-widest font-bold">Aucun média</span>
+              )}
+            </AnimatePresence>
+          </motion.section>
+
+          {/* File Browser Panel */}
+          {state.photos.length > 0 && (
+            <motion.div 
+              variants={itemVariants}
+              className="glass-panel rounded-xl p-4 flex flex-col gap-3 shadow-lg"
+            >
+              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4 text-accent" />
+                  <span className="text-[11px] uppercase tracking-wider font-bold text-text-dim">Explorateur de lot ({state.photos.length} fichiers)</span>
+                </div>
+                <button 
+                  onClick={() => {
+                    setState(p => ({ ...p, photos: [] }));
+                    setSelectedPhotoIndex(0);
+                  }}
+                  className="text-[10px] text-red-400 hover:text-red-300 font-semibold uppercase tracking-wider transition-colors cursor-pointer"
+                >
+                  Tout vider
+                </button>
               </div>
-            )}
-          </AnimatePresence>
-        </section>
+              <div className="max-h-40 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1">
+                <AnimatePresence initial={false}>
+                  {state.photos.map((photo, idx) => {
+                    const isActive = idx === selectedPhotoIndex;
+                    return (
+                      <motion.div 
+                        key={`${photo.name}_${photo.size}_${photo.lastModified}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.15 }}
+                        onClick={() => setSelectedPhotoIndex(idx)}
+                        className={`
+                          flex justify-between items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all border
+                          ${isActive 
+                            ? 'bg-accent/10 border-accent/40 text-white glow-border-active' 
+                            : 'bg-black/20 border-transparent hover:bg-white/5 hover:border-white/10 text-text-dim hover:text-text'}
+                        `}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <ImageIcon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-accent' : 'text-text-dim/60'}`} />
+                          <span className="text-xs font-mono truncate">{photo.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] text-text-dim font-mono flex-shrink-0">
+                            {(photo.size / 1024).toFixed(0)} KB
+                          </span>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setState(prev => {
+                                const nextPhotos = prev.photos.filter((_, pIdx) => pIdx !== idx);
+                                if (selectedPhotoIndex >= nextPhotos.length) {
+                                  setSelectedPhotoIndex(Math.max(0, nextPhotos.length - 1));
+                                }
+                                return { ...prev, photos: nextPhotos };
+                              });
+                            }}
+                            className="text-text-dim/50 hover:text-red-400 p-0.5 rounded transition-colors cursor-pointer"
+                            title="Retirer cette photo"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+        </motion.div>
 
         {/* Right Column: Date & Action */}
-        <div className="flex flex-col gap-4">
+        <motion.div 
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col gap-6 overflow-y-auto pr-1 custom-scrollbar"
+        >
           {/* Card 3: Timestamp */}
-          <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4">
-            <h2 className="text-[11px] font-semibold text-text-dim uppercase tracking-wider">3. Horodatage</h2>
-            
+          <motion.section 
+            variants={itemVariants}
+            className="glass-panel glass-panel-hover rounded-xl p-5 flex flex-col gap-4 shadow-lg transition-all duration-300"
+          >
             <div className="flex justify-between items-center">
-              <span className="text-sm">Activer</span>
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-accent" />
+                <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">3. Horodatage</h2>
+              </div>
               <input 
                 type="checkbox" 
                 checked={state.config.dateEnabled}
@@ -609,62 +949,180 @@ export default function App() {
               />
             </div>
 
-            {state.config.dateEnabled && (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs text-text-dim uppercase">
-                    <span>Date personnalisée</span>
-                    <button 
-                      onClick={() => setState(prev => ({ ...prev, config: { ...prev.config, customDate: new Date().toISOString().split('T')[0] } }))}
-                      className="text-accent hover:underline lowercase font-normal"
+            <AnimatePresence initial={false}>
+              {state.config.dateEnabled && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="overflow-hidden space-y-4 pt-1"
+                >
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-dim uppercase">Source</span>
+                    <select 
+                      value={state.config.dateFormat}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, dateFormat: e.target.value as 'current' | 'original' } }))}
+                      className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
                     >
-                      Aujourd'hui
-                    </button>
+                      <option value="current">Personnalisée</option>
+                      <option value="original">Origine</option>
+                    </select>
                   </div>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" />
+
+                  {state.config.dateFormat === 'current' ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[10px] text-text-dim uppercase">
+                        <span>Date personnalisée</span>
+                        <button 
+                          onClick={() => setState(prev => ({ ...prev, config: { ...prev.config, customDate: new Date().toISOString().split('T')[0] } }))}
+                          className="text-accent hover:text-accent-light lowercase font-semibold transition-colors cursor-pointer"
+                        >
+                          Aujourd'hui
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-dim pointer-events-none" />
+                        <input 
+                          type="date"
+                          value={state.config.customDate}
+                          onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, customDate: e.target.value } }))}
+                          className="w-full text-xs py-2 pl-9 pr-3 rounded-lg focus:outline-accent text-white font-mono"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-text-dim bg-black/40 border border-white/5 rounded-lg p-2.5 font-mono leading-relaxed">
+                      Date de modification de l'image (ex: {state.photos.length > 0 && state.photos[selectedPhotoIndex] ? new Date(state.photos[selectedPhotoIndex].lastModified).toLocaleDateString('fr-FR') : new Date().toLocaleDateString('fr-FR')}).
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center border-t border-white/5 pt-3">
+                    <span className="text-xs text-text-dim uppercase">Position</span>
+                    <select 
+                      value={state.config.datePosition}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, datePosition: e.target.value as Position } }))}
+                      className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
+                    >
+                      <option value="top-left">Haut-Gauche</option>
+                      <option value="top-right">Haut-Droite</option>
+                      <option value="top-center">Haut-Milieu</option>
+                      <option value="bottom-left">Bas-Gauche</option>
+                      <option value="bottom-right">Bas-Droite</option>
+                      <option value="bottom-center">Bas-Milieu</option>
+                    </select>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
+
+          {/* Card 3b: Filigrane Textuel */}
+          <motion.section 
+            variants={itemVariants}
+            className="glass-panel glass-panel-hover rounded-xl p-5 flex flex-col gap-4 shadow-lg transition-all duration-300"
+          >
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Layout className="w-4 h-4 text-accent" />
+                <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">3b. Filigrane Textuel</h2>
+              </div>
+              <input 
+                type="checkbox" 
+                checked={state.config.textEnabled}
+                onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textEnabled: e.target.checked } }))}
+                className="accent-accent w-4 h-4 cursor-pointer"
+              />
+            </div>
+
+            <AnimatePresence initial={false}>
+              {state.config.textEnabled && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="overflow-hidden space-y-4 pt-1"
+                >
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-text-dim uppercase">Texte du filigrane</span>
                     <input 
-                      type="date"
-                      value={state.config.customDate}
-                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, customDate: e.target.value } }))}
-                      className="w-full bg-bg border border-border text-sm py-2 pl-10 pr-3 rounded focus:outline-accent text-white"
+                      type="text"
+                      value={state.config.textValue}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textValue: e.target.value } }))}
+                      placeholder="ex: © 2026 Studio"
+                      className="w-full text-xs py-2 px-3 rounded-lg focus:outline-accent text-white"
                     />
                   </div>
-                </div>
 
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">Position</span>
-                  <select 
-                    value={state.config.datePosition}
-                    onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, datePosition: e.target.value as Position } }))}
-                    className="bg-bg border border-border text-xs p-1.5 rounded w-32 focus:outline-accent"
-                  >
-                    <option value="top-left">Haut-Gauche</option>
-                    <option value="top-right">Haut-Droite</option>
-                    <option value="top-center">Haut-Milieu</option>
-                    <option value="bottom-left">Bas-Gauche</option>
-                    <option value="bottom-right">Bas-Droite</option>
-                    <option value="bottom-center">Bas-Milieu</option>
-                  </select>
-                </div>
-                
-                <div className="text-[11px] text-text-dim leading-tight">
-                  La date sera apposée sur chaque photo avec un effet de relief.
-                </div>
-              </div>
-            )}
-          </section>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-dim uppercase">Position</span>
+                    <select 
+                      value={state.config.textPosition}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textPosition: e.target.value as Position } }))}
+                      className="text-xs p-1.5 rounded-lg w-32 focus:outline-accent text-white"
+                    >
+                      <option value="bottom-left">Bas-Gauche</option>
+                      <option value="bottom-right">Bas-Droite</option>
+                      <option value="bottom-center">Bas-Milieu</option>
+                      <option value="top-left">Haut-Gauche</option>
+                      <option value="top-right">Haut-Droite</option>
+                      <option value="top-center">Haut-Milieu</option>
+                      <option value="center">Centre</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-text-dim uppercase">
+                      <span>Opacité</span>
+                      <span>{Math.round(state.config.textOpacity * 100)}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0.1" max="1" step="0.1" value={state.config.textOpacity}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textOpacity: parseFloat(e.target.value) } }))}
+                      className="w-full cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-text-dim uppercase">
+                      <span>Taille</span>
+                      <span>{state.config.textScale}</span>
+                    </div>
+                    <input 
+                      type="range" min="10" max="200" step="5" value={state.config.textScale}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textScale: parseInt(e.target.value) } }))}
+                      className="w-full cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-dim uppercase">Couleur</span>
+                    <input 
+                      type="color"
+                      value={state.config.textColor}
+                      onChange={(e) => setState(prev => ({ ...prev, config: { ...prev.config, textColor: e.target.value } }))}
+                      className="bg-transparent border-0 cursor-pointer w-8 h-8 rounded"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
 
           {/* Batch Status */}
-          <section className="bg-card border border-border rounded-xl p-5 flex flex-col gap-4 flex-1">
-            <h2 className="text-[11px] font-semibold text-text-dim uppercase tracking-wider">Batch Status</h2>
+          <motion.section 
+            variants={itemVariants}
+            className="glass-panel glass-panel-hover rounded-xl p-5 flex flex-col gap-4 flex-1 shadow-lg transition-all duration-300"
+          >
+            <h2 className="text-[11px] font-bold text-text-dim uppercase tracking-wider">Statut du lot</h2>
             
-            <div className="flex-1 flex flex-col justify-center items-center">
-              <div className="text-4xl font-bold text-accent tracking-tighter">
+            <div className="flex-1 flex flex-col justify-center items-center py-4">
+              <div className="text-4xl font-extrabold text-accent tracking-tighter glow-accent">
                 {state.progress}%
               </div>
-              <div className="text-[11px] text-text-dim mt-2 uppercase tracking-wide">
-                {state.processing ? 'Traitement en cours' : 'Prêt pour traitement'}
+              <div className="text-[10px] text-text-dim mt-2 uppercase tracking-widest font-bold font-sans">
+                {state.processing ? 'Traitement...' : 'Prêt'}
               </div>
             </div>
 
@@ -672,30 +1130,44 @@ export default function App() {
               onClick={startProcessing}
               disabled={state.photos.length === 0 || state.processing}
               className={`
-                w-full py-3 rounded-md font-bold text-sm tracking-tight transition-all
+                w-full py-3 rounded-lg font-bold text-sm tracking-tight transition-all active:scale-[0.98] shadow-md cursor-pointer
                 ${state.photos.length > 0 && !state.processing
-                  ? 'bg-accent text-black hover:opacity-90'
-                  : 'bg-border text-text-dim cursor-not-allowed'}
+                  ? 'bg-accent text-black hover:bg-accent-light'
+                  : 'bg-white/5 text-text-dim cursor-not-allowed border border-white/5'}
               `}
             >
-              {state.processing ? 'Chargement...' : 'Lancer & Sauvegarder'}
+              {state.processing ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-black" />
+                  Traitement...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-1.5">
+                  <Download className="w-4 h-4 text-black" />
+                  Exporter (.zip)
+                </span>
+              )}
             </button>
-          </section>
-        </div>
+          </motion.section>
+        </motion.div>
       </main>
 
       {/* Footer Actions */}
-      <footer className="flex justify-end gap-3 pt-2">
-        <button 
-          onClick={() => setState(p => ({ ...p, photos: [], logo: null, logoPreview: null }))}
-          className="text-[11px] font-semibold uppercase px-4 py-2 border border-border rounded hover:bg-white/5 transition-colors"
-        >
-          Réinitialiser
-        </button>
-        <div className="w-[1px] bg-border mx-2" />
-        <div className="flex items-center text-[11px] text-text-dim gap-2">
-          <Settings2 className="w-3.5 h-3.5" />
-          Destination : /Export_SnapMark
+      <footer className="flex justify-between items-center border-t border-white/5 pt-4 mt-2">
+        <div className="flex items-center text-[11px] text-text-dim gap-2 font-mono">
+          <Settings2 className="w-3.5 h-3.5 text-accent animate-spin" style={{ animationDuration: '6s' }} />
+          Destination : /photos_marquees.zip
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => {
+              setState(p => ({ ...p, photos: [], logo: null, logoPreview: null }));
+              setSelectedPhotoIndex(0);
+            }}
+            className="text-[11px] font-bold uppercase tracking-wider px-4 py-2 border border-white/10 rounded-lg hover:bg-white/5 transition-all cursor-pointer"
+          >
+            Réinitialiser
+          </button>
         </div>
       </footer>
     </div>

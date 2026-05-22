@@ -11,8 +11,53 @@ import fs from "fs";
 const app = express();
 const PORT = 3000;
 
-// Simple in-memory store for bot user settings
-const userSettings: Record<number, { logoBuffers: Buffer[] }> = {};
+const LOGOS_DIR = path.join(process.cwd(), "data", "logos");
+fs.mkdirSync(LOGOS_DIR, { recursive: true });
+
+function getUserLogos(userId: number): Buffer[] {
+  const userDir = path.join(LOGOS_DIR, String(userId));
+  if (!fs.existsSync(userDir)) return [];
+  try {
+    const files = fs.readdirSync(userDir).filter(f => f.endsWith(".png")).sort();
+    return files.map(file => fs.readFileSync(path.join(userDir, file)));
+  } catch (err) {
+    console.error("Error reading user logos:", err);
+    return [];
+  }
+}
+
+function saveUserLogo(userId: number, logoBuffer: Buffer) {
+  const userDir = path.join(LOGOS_DIR, String(userId));
+  fs.mkdirSync(userDir, { recursive: true });
+  
+  const files = fs.readdirSync(userDir).filter(f => f.endsWith(".png")).sort();
+  
+  if (files.length >= 2) {
+    try {
+      fs.unlinkSync(path.join(userDir, files[0]));
+    } catch (e) {
+      console.error("Failed to delete old logo:", e);
+    }
+  }
+  
+  const fileName = `${Date.now()}.png`;
+  fs.writeFileSync(path.join(userDir, fileName), logoBuffer);
+}
+
+function clearUserLogos(userId: number) {
+  const userDir = path.join(LOGOS_DIR, String(userId));
+  if (fs.existsSync(userDir)) {
+    const files = fs.readdirSync(userDir);
+    for (const file of files) {
+      try {
+        fs.unlinkSync(path.join(userDir, file));
+      } catch (e) {}
+    }
+    try {
+      fs.rmdirSync(userDir);
+    } catch (e) {}
+  }
+}
 
 async function startServer() {
   const isProd = process.env.NODE_ENV === "production";
@@ -23,11 +68,32 @@ async function startServer() {
     const bot = new Telegraf(token);
 
     bot.start((ctx) => {
-      ctx.reply("Bienvenue sur SnapMark Studio ! 📸\n\nEnvoyez-moi une photo pour y apposer un filigrane.\n\nOptionnel : Envoyez-moi jusqu'à 2 logos (image PNG ou JPG) pour les personnaliser. Ils seront affichés côte à côte.");
+      ctx.reply("Bienvenue sur SnapMark Studio ! 📸\n\n" +
+                "Envoyez-moi une photo pour y apposer un filigrane.\n\n" +
+                "Optionnel :\n" +
+                "- Envoyez-moi jusqu'à 2 logos (comme Document ou Image) pour les personnaliser. Ils seront affichés côte à côte.\n" +
+                "- Utilisez /status pour voir vos logos actifs.\n" +
+                "- Utilisez /clear pour réinitialiser vos logos.");
+    });
+
+    bot.command("clear", async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId) return;
+      clearUserLogos(userId);
+      ctx.reply("🗑️ Tous vos logos personnalisés ont été supprimés. Les paramètres par défaut seront utilisés.");
+    });
+
+    bot.command("status", async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId) return;
+      const count = getUserLogos(userId).length;
+      ctx.reply(`ℹ️ Statut de votre SnapMark Studio :\n- Logos personnalisés : ${count}/2\n${count > 0 ? "Vos logos seront apposés sur vos photos." : "Le logo par défaut sera utilisé."}`);
     });
 
     // Handle Photos
     bot.on(message("photo"), async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId) return;
       try {
         const photo = ctx.message.photo[ctx.message.photo.length - 1]; // get best quality
         const fileLink = await ctx.telegram.getFileLink(photo.file_id);
@@ -39,7 +105,7 @@ async function startServer() {
         const photoBuffer = Buffer.from(response.data);
 
         // Get user logos or default
-        let currentLogoBuffers: Buffer[] = userSettings[ctx.from.id]?.logoBuffers || [];
+        let currentLogoBuffers: Buffer[] = getUserLogos(userId);
         
         if (currentLogoBuffers.length === 0) {
           // Use default logo (prioritizing logo.png then favicon.svg)
@@ -112,6 +178,8 @@ async function startServer() {
 
     // Handle Logo Updates
     bot.on([message("document"), message("photo")], async (ctx) => {
+      const userId = ctx.from?.id;
+      if (!userId) return;
       let fileId = "";
       let fileName = "logo.png";
 
@@ -129,19 +197,10 @@ async function startServer() {
         const response = await axios.get(fileLink.toString(), { responseType: 'arraybuffer' });
         const logoBuffer = Buffer.from(response.data);
 
-        if (!userSettings[ctx.from.id]) {
-          userSettings[ctx.from.id] = { logoBuffers: [] };
-        }
-
-        const buffers = userSettings[ctx.from.id].logoBuffers;
-        buffers.push(logoBuffer);
+        saveUserLogo(userId, logoBuffer);
+        const count = getUserLogos(userId).length;
         
-        // Keep only last 2
-        if (buffers.length > 2) {
-          buffers.shift();
-        }
-        
-        ctx.reply(`✅ Logo ajouté (${buffers.length}/2). Envoyez un autre logo pour le duo, ou une photo pour tester.`);
+        ctx.reply(`✅ Logo ajouté (${count}/2). Envoyez un autre logo pour le duo, ou une photo pour tester.`);
       } catch (err) {
         ctx.reply("Erreur lors de l'enregistrement du logo.");
       }
